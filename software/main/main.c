@@ -30,7 +30,9 @@
 #include "driver/gpio.h"
 #include "hid_dev.h"
 
-#define HID_DEMO_TAG "HID_DEMO"
+#include "esp_adc/adc_oneshot.h"
+
+#define HID_DEMO_TAG "C1_LOG"
 
 
 static uint16_t hid_conn_id = 0;
@@ -40,20 +42,20 @@ static bool send_mouse = false;
 
 static void hidd_event_callback(esp_hidd_cb_event_t event, esp_hidd_cb_param_t *param);
 
-#define HIDD_DEVICE_NAME            "HID"
+#define HIDD_DEVICE_NAME "MKTech C1 Mouse"
 static uint8_t hidd_service_uuid128[] = {
     /* LSB <--------------------------------------------------------------------------------> MSB */
     //first uuid, 16bit, [12],[13] is the value
-    0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0x12, 0x18, 0x00, 0x00,
+    0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0x63, 0x37, 0x00, 0x00,
 };
 
 static esp_ble_adv_data_t hidd_adv_data = {
     .set_scan_rsp = false,
     .include_name = true,
     .include_txpower = true,
-    .min_interval = 0x0006, //slave connection min interval, Time = min_interval * 1.25 msec
-    .max_interval = 0x0010, //slave connection max interval, Time = max_interval * 1.25 msec
-    .appearance = 0x03c0,       //HID Generic,
+    .min_interval = 0x0006, //peripheral connection min interval, Time = min_interval * 1.25 msec
+    .max_interval = 0x0010, //peripheral connection max interval, Time = max_interval * 1.25 msec
+    .appearance = 0x03c0,
     .manufacturer_len = 0,
     .p_manufacturer_data =  NULL,
     .service_data_len = 0,
@@ -74,6 +76,7 @@ static esp_ble_adv_params_t hidd_adv_params = {
     .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
 };
 
+static int mouseXY[2];
 
 static void hidd_event_callback(esp_hidd_cb_event_t event, esp_hidd_cb_param_t *param)
 {
@@ -151,9 +154,28 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
 
 void hid_input_task(void *pvParameters)
 {
+    // ADC Initialization
+    adc_oneshot_unit_handle_t handle;
+    adc_oneshot_unit_init_cfg_t init_config = {
+        .unit_id = ADC_UNIT_1,
+    };
+    adc_oneshot_new_unit(&init_config, &handle);
+
+    // ADC Configuration
+    adc_oneshot_chan_cfg_t config = {
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+        .atten = ADC_ATTEN_DB_11,
+    };
+    adc_oneshot_config_channel(handle, ADC_CHANNEL_6, &config);
+    adc_oneshot_config_channel(handle, ADC_CHANNEL_7, &config);
+
+    // GPIO Configuration (TODO..)
+
     vTaskDelay(1000 / portTICK_PERIOD_MS);
     while(1) {
-        vTaskDelay(2000 / portTICK_PERIOD_MS);
+        // ADC Readings (JoystickX, JoystickY)
+        adc_oneshot_read(handle, ADC_CHANNEL_6, &mouseXY[0]);
+
         if (sec_conn) {
             ESP_LOGI(HID_DEMO_TAG, "Send mouse switch");
             send_mouse = true;
@@ -167,6 +189,7 @@ void hid_input_task(void *pvParameters)
                 vTaskDelay(3000 / portTICK_PERIOD_MS);
             }
         }
+        vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 }
 
@@ -227,10 +250,6 @@ void app_main(void)
     esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, sizeof(uint8_t));
     esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, sizeof(uint8_t));
     esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size, sizeof(uint8_t));
-    /* If your BLE device act as a Slave, the init_key means you hope which types of key of the master should distribute to you,
-    and the response key means which key you can distribute to the Master;
-    If your BLE device act as a master, the response key means you hope which types of key of the slave should distribute to you,
-    and the init key means which key you can distribute to the slave. */
     esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(uint8_t));
     esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(uint8_t));
 
