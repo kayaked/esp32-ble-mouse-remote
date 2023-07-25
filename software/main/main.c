@@ -37,7 +37,6 @@ Date: 7/24/23
 
 static uint16_t hid_conn_id = 0;
 static bool sec_conn = false;
-static bool send_mouse = false;
 #define CHAR_DECLARATION_SIZE   (sizeof(uint8_t))
 
 static void hidd_event_callback(esp_hidd_cb_event_t event, esp_hidd_cb_param_t *param);
@@ -230,8 +229,8 @@ void hid_input_task(void *pvParameters)
     // 
     int mouseXY[2];
     bool active[3];
-    int btn = 0, x, y, swactive = 0, swstate = 0;
-    bool packet;
+    int btn = 0, x, y;
+    bool packet, swactive = 0, swstate = 0;
     while(1) {
         // ADC Readings [JoystickX, JoystickY]
         adc_oneshot_read(handle, ADC_CHANNEL_6, &mouseXY[0]);
@@ -265,12 +264,15 @@ void hid_input_task(void *pvParameters)
             }
         } else {
             if(mouseXY[1] > 2500) {
-                ESP_LOGI(HID_TAG, "VOLUME DOWN");
+                esp_hidd_send_consumer_value(hid_conn_id, HID_CONSUMER_VOLUME_UP, false);
+                esp_hidd_send_consumer_value(hid_conn_id, HID_CONSUMER_VOLUME_DOWN, true);
             } else if(mouseXY[1] < 500) {
-                ESP_LOGI(HID_TAG, "VOLUME UP");
+                esp_hidd_send_consumer_value(hid_conn_id, HID_CONSUMER_VOLUME_DOWN, false);
+                esp_hidd_send_consumer_value(hid_conn_id, HID_CONSUMER_VOLUME_UP, true);
                 packet = true;
             } else {
-                ESP_LOGI(HID_TAG, "VOLUME SET");
+                esp_hidd_send_consumer_value(hid_conn_id, HID_CONSUMER_VOLUME_DOWN, false);
+                esp_hidd_send_consumer_value(hid_conn_id, HID_CONSUMER_VOLUME_UP, false);
             }
         }
 
@@ -317,6 +319,19 @@ void hid_input_task(void *pvParameters)
                 btn = 0x000;
                 active[2] = false;
             }
+        }
+
+        if(gpio_get_level(GPIO_INPUT_IO_3) == 0) { // Stick switch is pulled up and active low
+            if(swactive == false) {
+                if(swstate == false) {
+                    swstate = true;
+                } else {
+                    swstate = false;
+                }
+                swactive = true;
+            }
+        } else {
+            if(swactive == true) swactive = false;
         }
 
         if (sec_conn && packet) {
