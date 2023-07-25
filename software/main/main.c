@@ -1,10 +1,10 @@
 /*
- * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
- *
- * SPDX-License-Identifier: Unlicense OR CC0-1.0
- * 
- * Modified By: Jack Engle (kayaked)
- * Date: 7/23/2023
+Marty Kahuna Tech (MKT) C1
+Software Version: PRE-RELEASE
+
+Copyright Jack Engle (kayaked) 2023.
+
+Date: 7/24/23
  */
 
 #include <stdio.h>
@@ -32,7 +32,7 @@
 
 #include "esp_adc/adc_oneshot.h"
 
-#define HID_DEMO_TAG "C1_LOG"
+#define HID_TAG "C1_LOG"
 
 
 static uint16_t hid_conn_id = 0;
@@ -48,6 +48,12 @@ static uint8_t hidd_service_uuid128[] = {
     //first uuid, 16bit, [12],[13] is the value
     0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0x63, 0x37, 0x00, 0x00,
 };
+
+#define GPIO_INPUT_IO_0     04
+#define GPIO_INPUT_IO_1     02
+#define GPIO_INPUT_IO_2     15
+#define GPIO_INPUT_IO_3     32
+#define GPIO_INPUT_PIN_SEL  ((1ULL<<GPIO_INPUT_IO_0) | (1ULL<<GPIO_INPUT_IO_1) | (1ULL<<GPIO_INPUT_IO_2) | (1ULL<<GPIO_INPUT_IO_3))
 
 static esp_ble_adv_data_t hidd_adv_data = {
     .set_scan_rsp = false,
@@ -76,8 +82,6 @@ static esp_ble_adv_params_t hidd_adv_params = {
     .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
 };
 
-static int mouseXY[2];
-
 static void hidd_event_callback(esp_hidd_cb_event_t event, esp_hidd_cb_param_t *param)
 {
     switch(event) {
@@ -96,24 +100,24 @@ static void hidd_event_callback(esp_hidd_cb_event_t event, esp_hidd_cb_param_t *
         case ESP_HIDD_EVENT_DEINIT_FINISH:
 	     break;
 		case ESP_HIDD_EVENT_BLE_CONNECT: {
-            ESP_LOGI(HID_DEMO_TAG, "ESP_HIDD_EVENT_BLE_CONNECT");
+            ESP_LOGI(HID_TAG, "ESP_HIDD_EVENT_BLE_CONNECT");
             hid_conn_id = param->connect.conn_id;
             break;
         }
         case ESP_HIDD_EVENT_BLE_DISCONNECT: {
             sec_conn = false;
-            ESP_LOGI(HID_DEMO_TAG, "ESP_HIDD_EVENT_BLE_DISCONNECT");
+            ESP_LOGI(HID_TAG, "ESP_HIDD_EVENT_BLE_DISCONNECT");
             esp_ble_gap_start_advertising(&hidd_adv_params);
             break;
         }
         case ESP_HIDD_EVENT_BLE_VENDOR_REPORT_WRITE_EVT: {
-            ESP_LOGI(HID_DEMO_TAG, "%s, ESP_HIDD_EVENT_BLE_VENDOR_REPORT_WRITE_EVT", __func__);
-            ESP_LOG_BUFFER_HEX(HID_DEMO_TAG, param->vendor_write.data, param->vendor_write.length);
+            ESP_LOGI(HID_TAG, "%s, ESP_HIDD_EVENT_BLE_VENDOR_REPORT_WRITE_EVT", __func__);
+            ESP_LOG_BUFFER_HEX(HID_TAG, param->vendor_write.data, param->vendor_write.length);
             break;
         }
         case ESP_HIDD_EVENT_BLE_LED_REPORT_WRITE_EVT: {
-            ESP_LOGI(HID_DEMO_TAG, "ESP_HIDD_EVENT_BLE_LED_REPORT_WRITE_EVT");
-            ESP_LOG_BUFFER_HEX(HID_DEMO_TAG, param->led_write.data, param->led_write.length);
+            ESP_LOGI(HID_TAG, "ESP_HIDD_EVENT_BLE_LED_REPORT_WRITE_EVT");
+            ESP_LOG_BUFFER_HEX(HID_TAG, param->led_write.data, param->led_write.length);
             break;
         }
         default:
@@ -130,7 +134,7 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
         break;
      case ESP_GAP_BLE_SEC_REQ_EVT:
         for(int i = 0; i < ESP_BD_ADDR_LEN; i++) {
-             ESP_LOGD(HID_DEMO_TAG, "%x:",param->ble_security.ble_req.bd_addr[i]);
+             ESP_LOGD(HID_TAG, "%x:",param->ble_security.ble_req.bd_addr[i]);
         }
         esp_ble_gap_security_rsp(param->ble_security.ble_req.bd_addr, true);
 	 break;
@@ -138,17 +142,34 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
         sec_conn = true;
         esp_bd_addr_t bd_addr;
         memcpy(bd_addr, param->ble_security.auth_cmpl.bd_addr, sizeof(esp_bd_addr_t));
-        ESP_LOGI(HID_DEMO_TAG, "remote BD_ADDR: %08x%04x",\
+        ESP_LOGI(HID_TAG, "remote BD_ADDR: %08x%04x",\
                 (bd_addr[0] << 24) + (bd_addr[1] << 16) + (bd_addr[2] << 8) + bd_addr[3],
                 (bd_addr[4] << 8) + bd_addr[5]);
-        ESP_LOGI(HID_DEMO_TAG, "address type = %d", param->ble_security.auth_cmpl.addr_type);
-        ESP_LOGI(HID_DEMO_TAG, "pair status = %s",param->ble_security.auth_cmpl.success ? "success" : "fail");
+        ESP_LOGI(HID_TAG, "address type = %d", param->ble_security.auth_cmpl.addr_type);
+        ESP_LOGI(HID_TAG, "pair status = %s",param->ble_security.auth_cmpl.success ? "success" : "fail");
         if(!param->ble_security.auth_cmpl.success) {
-            ESP_LOGE(HID_DEMO_TAG, "fail reason = 0x%x",param->ble_security.auth_cmpl.fail_reason);
+            ESP_LOGE(HID_TAG, "fail reason = 0x%x",param->ble_security.auth_cmpl.fail_reason);
         }
         break;
     default:
         break;
+    }
+}
+
+static QueueHandle_t gpio_evt_queue = NULL;
+static void IRAM_ATTR gpio_isr_handler(void* arg)
+{
+    uint32_t gpio_num = (uint32_t) arg;
+    xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
+}
+
+static void gpio_task(void* arg)
+{
+    uint32_t io_num;
+    for(;;) {
+        if(xQueueReceive(gpio_evt_queue, &io_num, portMAX_DELAY)) {
+            printf("GPIO[%"PRIu32"] intr, val: %d\n", io_num, gpio_get_level(io_num));
+        }
     }
 }
 
@@ -170,24 +191,138 @@ void hid_input_task(void *pvParameters)
     adc_oneshot_config_channel(handle, ADC_CHANNEL_7, &config);
 
     // GPIO Configuration (TODO..)
+    gpio_config_t io_conf = {};
+    io_conf.intr_type = GPIO_INTR_POSEDGE;
+    io_conf.mode = GPIO_MODE_INPUT;
+    io_conf.pin_bit_mask = GPIO_INPUT_PIN_SEL;
+    //disable pull-down mode
+    io_conf.pull_down_en = 1;
+    //disable pull-up mode
+    io_conf.pull_up_en = 0;
+
+    gpio_config(&io_conf);
+    gpio_install_isr_service(0);
+    gpio_evt_queue = xQueueCreate(10, sizeof(uint32_t));
+    xTaskCreate(gpio_task, "GPIO_TASK", 2048, NULL, 10, NULL);
+    gpio_isr_handler_add(GPIO_INPUT_IO_0, gpio_isr_handler, (void*) GPIO_INPUT_IO_0);
+    gpio_isr_handler_add(GPIO_INPUT_IO_1, gpio_isr_handler, (void*) GPIO_INPUT_IO_1);
+    gpio_isr_handler_add(GPIO_INPUT_IO_2, gpio_isr_handler, (void*) GPIO_INPUT_IO_2);
+    gpio_isr_handler_add(GPIO_INPUT_IO_3, gpio_isr_handler, (void*) GPIO_INPUT_IO_3);
 
     vTaskDelay(1000 / portTICK_PERIOD_MS);
+    // btn is the mouse button's identifier
+    // mouseXY holds raw values from ADC OneShot
+    // x and y are the offsets sent to move the mouse by during this cycle
+    // packet is true when a mouse update is being sent, and false for no changes
+    /*
+    Swstate 0:
+    - GPIO 4: Left Click
+    - GPIO 2: Right Click
+    - GPIO 15: Middle Click
+    - ADC6/7: Mouse Movement
+    Swstate 1:
+    - GPIO 4: Rewind
+    - GPIO 2: Fast-Forward
+    - GPIO 15: Pause/Play
+    - ADC6: N/A
+    - ADC7: Volume Up/Down
+    */
+    // 
+    int mouseXY[2];
+    bool active[3];
+    int btn = 0, x, y, swactive = 0, swstate = 0;
+    bool packet;
     while(1) {
-        // ADC Readings (JoystickX, JoystickY)
+        // ADC Readings [JoystickX, JoystickY]
         adc_oneshot_read(handle, ADC_CHANNEL_6, &mouseXY[0]);
+        adc_oneshot_read(handle, ADC_CHANNEL_7, &mouseXY[1]);
+        x = 0;
+        y = 0;
+        packet = false;
 
-        if (sec_conn) {
-            ESP_LOGI(HID_DEMO_TAG, "Send mouse switch");
-            send_mouse = true;
-            //uint8_t key_vaule = {HID_KEY_A};
-            //esp_hidd_send_keyboard_value(hid_conn_id, 0, &key_vaule, 1);
-                esp_hidd_send_mouse_value(hid_conn_id, 0, 0, 0);
-            vTaskDelay(3000 / portTICK_PERIOD_MS);
-            if (send_mouse) {
-                send_mouse = false;
-                esp_hidd_send_mouse_value(hid_conn_id, 1, 0, 0);
-                vTaskDelay(3000 / portTICK_PERIOD_MS);
+        if(!swstate) {
+            if(mouseXY[0] > 1900) {
+                x = mouseXY[0]/1000;
+                packet = true;
+            } else if(mouseXY[0] < 1250) {
+                x = ((3100 - mouseXY[0]) * -1)/1000;
+                packet = true;
+            } else {
+                x = 0;
             }
+        }
+
+        // Mouse Y Movement Detection
+        if(!swstate) {
+            if(mouseXY[1] > 1900) {
+                y = (mouseXY[1]*-1)/1000;
+                packet = true;
+            } else if(mouseXY[1] < 1250) {
+                y = ((3100 - mouseXY[1]))/1000;
+                packet = true;
+            } else {
+                y = 0;
+            }
+        } else {
+            if(mouseXY[1] > 2500) {
+                ESP_LOGI(HID_TAG, "VOLUME DOWN");
+            } else if(mouseXY[1] < 500) {
+                ESP_LOGI(HID_TAG, "VOLUME UP");
+                packet = true;
+            } else {
+                ESP_LOGI(HID_TAG, "VOLUME SET");
+            }
+        }
+
+        // Left Click
+        if(gpio_get_level(GPIO_INPUT_IO_0) == 1) {
+            if(active[0] == false) {
+                packet = true;
+                btn = 0x001;
+                active[0] = true;
+            }
+        } else {
+            if(active[0] == true) {
+                packet = true;
+                btn = 0x000;
+                active[0] = false;
+            }
+        }
+
+        // Right Click
+        if(gpio_get_level(GPIO_INPUT_IO_1) == 1) {
+            if(active[1] == false) {
+                packet = true;
+                btn = 0x002;
+                active[1] = true;
+            }
+        } else {
+            if(active[1] == true) {
+                packet = true;
+                btn = 0x000;
+                active[1] = false;
+            }
+        }
+
+        // Middle Click
+        if(gpio_get_level(GPIO_INPUT_IO_2) == 1) {
+            if(active[2] == false) {
+                packet = true;
+                btn = 0x004;
+                active[2] = true;
+            }
+        } else {
+            if(active[2] == true) {
+                packet = true;
+                btn = 0x000;
+                active[2] = false;
+            }
+        }
+
+        if (sec_conn && packet) {
+            /*ESP_LOGI(HID_TAG, "X: %d | Y: %d | btn: %d", x, y, btn);
+            ESP_LOGI(HID_TAG, "Send mouse switch");*/
+            esp_hidd_send_mouse_value(hid_conn_id, btn, x, y);
         }
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
@@ -211,30 +346,30 @@ void app_main(void)
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
     ret = esp_bt_controller_init(&bt_cfg);
     if (ret) {
-        ESP_LOGE(HID_DEMO_TAG, "%s initialize controller failed\n", __func__);
+        ESP_LOGE(HID_TAG, "%s initialize controller failed\n", __func__);
         return;
     }
 
     ret = esp_bt_controller_enable(ESP_BT_MODE_BLE);
     if (ret) {
-        ESP_LOGE(HID_DEMO_TAG, "%s enable controller failed\n", __func__);
+        ESP_LOGE(HID_TAG, "%s enable controller failed\n", __func__);
         return;
     }
 
     ret = esp_bluedroid_init();
     if (ret) {
-        ESP_LOGE(HID_DEMO_TAG, "%s init bluedroid failed\n", __func__);
+        ESP_LOGE(HID_TAG, "%s init bluedroid failed\n", __func__);
         return;
     }
 
     ret = esp_bluedroid_enable();
     if (ret) {
-        ESP_LOGE(HID_DEMO_TAG, "%s init bluedroid failed\n", __func__);
+        ESP_LOGE(HID_TAG, "%s init bluedroid failed\n", __func__);
         return;
     }
 
     if((ret = esp_hidd_profile_init()) != ESP_OK) {
-        ESP_LOGE(HID_DEMO_TAG, "%s init bluedroid failed\n", __func__);
+        ESP_LOGE(HID_TAG, "%s init bluedroid failed\n", __func__);
     }
 
     ///register the callback function to the gap module
