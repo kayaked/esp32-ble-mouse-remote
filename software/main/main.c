@@ -3,10 +3,20 @@ Marty Kahuna Tech (MKT) C1
 Software Version: PRE-RELEASE
 
 Copyright Jack Engle (kayaked) 2023.
+Licensed under the MIT Freeware License
 
-Date: 7/24/23
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Date: 7/25/23
  */
 
+// FreeRTOS, ESP General, C general
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,12 +24,14 @@ Date: 7/24/23
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
 #include "esp_system.h"
-#include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_log.h"
-#include "nvs_flash.h"
-#include "esp_bt.h"
 
+// Flash Memory
+#include "nvs_flash.h"
+
+// BlueTooth/LE, GATT, HIDD
+#include "esp_bt.h"
 #include "esp_hidd_prf_api.h"
 #include "esp_bt_defs.h"
 #include "esp_gap_ble_api.h"
@@ -27,9 +39,10 @@ Date: 7/24/23
 #include "esp_gatt_defs.h"
 #include "esp_bt_main.h"
 #include "esp_bt_device.h"
-#include "driver/gpio.h"
 #include "hid_dev.h"
 
+// GPIO, ADC
+#include "driver/gpio.h"
 #include "esp_adc/adc_oneshot.h"
 
 #define HID_TAG "C1_LOG"
@@ -44,7 +57,7 @@ static void hidd_event_callback(esp_hidd_cb_event_t event, esp_hidd_cb_param_t *
 #define HIDD_DEVICE_NAME "MKTech C1 Mouse"
 static uint8_t hidd_service_uuid128[] = {
     /* LSB <--------------------------------------------------------------------------------> MSB */
-    //first uuid, 16bit, [12],[13] is the value
+    // Shortened UUID: [12],[13]
     0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0x63, 0x37, 0x00, 0x00,
 };
 
@@ -58,8 +71,8 @@ static esp_ble_adv_data_t hidd_adv_data = {
     .set_scan_rsp = false,
     .include_name = true,
     .include_txpower = true,
-    .min_interval = 0x0006, //peripheral connection min interval, Time = min_interval * 1.25 msec
-    .max_interval = 0x0010, //peripheral connection max interval, Time = max_interval * 1.25 msec
+    .min_interval = 0x0006,
+    .max_interval = 0x0010,
     .appearance = 0x03c0,
     .manufacturer_len = 0,
     .p_manufacturer_data =  NULL,
@@ -75,8 +88,6 @@ static esp_ble_adv_params_t hidd_adv_params = {
     .adv_int_max        = 0x30,
     .adv_type           = ADV_TYPE_IND,
     .own_addr_type      = BLE_ADDR_TYPE_PUBLIC,
-    //.peer_addr            =
-    //.peer_addr_type       =
     .channel_map        = ADV_CHNL_ALL,
     .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
 };
@@ -86,7 +97,6 @@ static void hidd_event_callback(esp_hidd_cb_event_t event, esp_hidd_cb_param_t *
     switch(event) {
         case ESP_HIDD_EVENT_REG_FINISH: {
             if (param->init_finish.state == ESP_HIDD_INIT_OK) {
-                //esp_bd_addr_t rand_addr = {0x04,0x11,0x11,0x11,0x11,0x05};
                 esp_ble_gap_set_device_name(HIDD_DEVICE_NAME);
                 esp_ble_gap_config_adv_data(&hidd_adv_data);
 
@@ -263,10 +273,10 @@ void hid_input_task(void *pvParameters)
                 y = 0;
             }
         } else {
-            if(mouseXY[1] > 2500) {
+            if(mouseXY[1] > 2100) {
                 esp_hidd_send_consumer_value(hid_conn_id, HID_CONSUMER_VOLUME_UP, false);
                 esp_hidd_send_consumer_value(hid_conn_id, HID_CONSUMER_VOLUME_DOWN, true);
-            } else if(mouseXY[1] < 500) {
+            } else if(mouseXY[1] < 1050) {
                 esp_hidd_send_consumer_value(hid_conn_id, HID_CONSUMER_VOLUME_DOWN, false);
                 esp_hidd_send_consumer_value(hid_conn_id, HID_CONSUMER_VOLUME_UP, true);
                 packet = true;
@@ -282,6 +292,11 @@ void hid_input_task(void *pvParameters)
                 packet = true;
                 btn = 0x001;
                 active[0] = true;
+                if(swstate && sec_conn) {
+                    uint8_t keyLeft = {HID_KEY_LEFT_ARROW};
+                    esp_hidd_send_keyboard_value(hid_conn_id, 0, &keyLeft, 1);
+                    esp_hidd_send_keyboard_value(hid_conn_id, 0, &keyLeft, 0);
+                }
             }
         } else {
             if(active[0] == true) {
@@ -297,6 +312,11 @@ void hid_input_task(void *pvParameters)
                 packet = true;
                 btn = 0x002;
                 active[1] = true;
+                if(swstate && sec_conn) {
+                    uint8_t keyRight = {HID_KEY_RIGHT_ARROW};
+                    esp_hidd_send_keyboard_value(hid_conn_id, 0, &keyRight, 1);
+                    esp_hidd_send_keyboard_value(hid_conn_id, 0, &keyRight, 0);
+                }
             }
         } else {
             if(active[1] == true) {
@@ -312,6 +332,11 @@ void hid_input_task(void *pvParameters)
                 packet = true;
                 btn = 0x004;
                 active[2] = true;
+                if(swstate && sec_conn) {
+                    esp_hidd_send_consumer_value(hid_conn_id, HID_CONSUMER_PAUSE, true);
+                    esp_hidd_send_consumer_value(hid_conn_id, HID_CONSUMER_PAUSE, false);
+                    ESP_LOGI("DEBUG", "Play/Pause successfully sent.");
+                }
             }
         } else {
             if(active[2] == true) {
@@ -325,9 +350,24 @@ void hid_input_task(void *pvParameters)
             if(swactive == false) {
                 if(swstate == false) {
                     swstate = true;
+
+                    // When remote mode is activated, release every mouse button during this cycle
+                    // This also resets the variables (mode agnostic) for use with remote mode
+                    btn = 0x000;
+                    x = 0;
+                    y = 0;
+                    if(sec_conn) esp_hidd_send_mouse_value(hid_conn_id, btn, x, y);
                 } else {
                     swstate = false;
+
+                    // When mouse mode is activated, disable every consumer signal
+                    if(sec_conn) {
+                        esp_hidd_send_consumer_value(hid_conn_id, HID_CONSUMER_VOLUME_DOWN, false);
+                        esp_hidd_send_consumer_value(hid_conn_id, HID_CONSUMER_VOLUME_UP, false);
+                        esp_hidd_send_consumer_value(hid_conn_id, HID_CONSUMER_PLAY_PAUSE, false);
+                    }
                 }
+
                 swactive = true;
             }
         } else {
@@ -335,14 +375,16 @@ void hid_input_task(void *pvParameters)
         }
 
         if (sec_conn && packet) {
-            /*ESP_LOGI(HID_TAG, "X: %d | Y: %d | btn: %d", x, y, btn);
-            ESP_LOGI(HID_TAG, "Send mouse switch");*/
-            esp_hidd_send_mouse_value(hid_conn_id, btn, x, y);
+            ESP_LOGI("DEBUG", "X: %d | Y: %d | btn: %d", x, y, btn);
+            ESP_LOGI("DEBUG", "Send mouse switch");
+            if(!swstate) {
+                ESP_LOGI("DEBUG", "Test");
+                esp_hidd_send_mouse_value(hid_conn_id, btn, x, y);
+            }
         }
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 }
-
 
 void app_main(void)
 {
@@ -387,7 +429,7 @@ void app_main(void)
         ESP_LOGE(HID_TAG, "%s init bluedroid failed\n", __func__);
     }
 
-    ///register the callback function to the gap module
+    // Register the callback function to the gap module
     esp_ble_gap_register_callback(gap_event_handler);
     esp_hidd_register_callbacks(hidd_event_callback);
 
