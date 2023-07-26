@@ -172,16 +172,6 @@ static void IRAM_ATTR gpio_isr_handler(void* arg)
     xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
 }
 
-static void gpio_task(void* arg)
-{
-    uint32_t io_num;
-    for(;;) {
-        if(xQueueReceive(gpio_evt_queue, &io_num, portMAX_DELAY)) {
-            printf("GPIO[%"PRIu32"] intr, val: %d\n", io_num, gpio_get_level(io_num));
-        }
-    }
-}
-
 void hid_input_task(void *pvParameters)
 {
     // ADC Initialization
@@ -212,7 +202,6 @@ void hid_input_task(void *pvParameters)
     gpio_config(&io_conf);
     gpio_install_isr_service(0);
     gpio_evt_queue = xQueueCreate(10, sizeof(uint32_t));
-    xTaskCreate(gpio_task, "GPIO_TASK", 2048, NULL, 10, NULL);
     gpio_isr_handler_add(GPIO_INPUT_IO_0, gpio_isr_handler, (void*) GPIO_INPUT_IO_0);
     gpio_isr_handler_add(GPIO_INPUT_IO_1, gpio_isr_handler, (void*) GPIO_INPUT_IO_1);
     gpio_isr_handler_add(GPIO_INPUT_IO_2, gpio_isr_handler, (void*) GPIO_INPUT_IO_2);
@@ -335,7 +324,7 @@ void hid_input_task(void *pvParameters)
                 if(swstate && sec_conn) {
                     esp_hidd_send_consumer_value(hid_conn_id, HID_CONSUMER_PAUSE, true);
                     esp_hidd_send_consumer_value(hid_conn_id, HID_CONSUMER_PAUSE, false);
-                    ESP_LOGI("DEBUG", "Play/Pause successfully sent.");
+                    //ESP_LOGI("DEBUG", "Play/Pause successfully sent.");
                 }
             }
         } else {
@@ -375,8 +364,8 @@ void hid_input_task(void *pvParameters)
         }
 
         if (sec_conn && packet) {
-            ESP_LOGI("DEBUG", "X: %d | Y: %d | btn: %d", x, y, btn);
-            ESP_LOGI("DEBUG", "Send mouse switch");
+            /*ESP_LOGI("DEBUG", "X: %d | Y: %d | btn: %d", x, y, btn);
+            ESP_LOGI("DEBUG", "Send mouse switch");*/
             if(!swstate) {
                 ESP_LOGI("DEBUG", "Test");
                 esp_hidd_send_mouse_value(hid_conn_id, btn, x, y);
@@ -390,7 +379,7 @@ void app_main(void)
 {
     esp_err_t ret;
 
-    // Initialize NVS.
+    // Initialize NVS Flash
     ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
@@ -409,24 +398,24 @@ void app_main(void)
 
     ret = esp_bt_controller_enable(ESP_BT_MODE_BLE);
     if (ret) {
-        ESP_LOGE(HID_TAG, "%s enable controller failed\n", __func__);
+        ESP_LOGE(HID_TAG, "%s enable failed\n", __func__);
         return;
     }
 
     ret = esp_bluedroid_init();
     if (ret) {
-        ESP_LOGE(HID_TAG, "%s init bluedroid failed\n", __func__);
+        ESP_LOGE(HID_TAG, "%s init failed\n", __func__);
         return;
     }
 
     ret = esp_bluedroid_enable();
     if (ret) {
-        ESP_LOGE(HID_TAG, "%s init bluedroid failed\n", __func__);
+        ESP_LOGE(HID_TAG, "%s init failed\n", __func__);
         return;
     }
 
     if((ret = esp_hidd_profile_init()) != ESP_OK) {
-        ESP_LOGE(HID_TAG, "%s init bluedroid failed\n", __func__);
+        ESP_LOGE(HID_TAG, "%s init failed\n", __func__);
     }
 
     // Register the callback function to the gap module
@@ -434,9 +423,9 @@ void app_main(void)
     esp_hidd_register_callbacks(hidd_event_callback);
 
     /* set the security iocap & auth_req & key size & init key response key parameters to the stack*/
-    esp_ble_auth_req_t auth_req = ESP_LE_AUTH_BOND;     //bonding with peer device after authentication
-    esp_ble_io_cap_t iocap = ESP_IO_CAP_NONE;           //set the IO capability to No output No input
-    uint8_t key_size = 16;      //the key size should be 7~16 bytes
+    esp_ble_auth_req_t auth_req = ESP_LE_AUTH_BOND;
+    esp_ble_io_cap_t iocap = ESP_IO_CAP_NONE;
+    uint8_t key_size = 16;
     uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
     uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
     esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, sizeof(uint8_t));
